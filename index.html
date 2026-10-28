@@ -98,6 +98,8 @@ button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .pair{display:flex;justify-content:center;gap:1.3em;font-size:14px;color:var(--muted);flex-wrap:wrap}
 .pair b{font-weight:400;color:var(--ink)}
 .sunset{margin:1em 0 .1em;font-family:"Shippori Mincho","Hiragino Mincho ProN",Georgia,serif;font-size:clamp(17px,2.2vh,21px);line-height:1.4}
+.sunset{text-wrap:balance}
+.sunset .nw{white-space:nowrap}
 .sunset small{display:block;font-family:"Zen Kaku Gothic New","Hiragino Sans",Arial,sans-serif;font-size:13px;color:var(--muted);margin-top:.3em}
 .minor{font-size:13px;color:var(--muted);line-height:1.65;margin-top:.8em}
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:.7em;opacity:.9}
@@ -1146,8 +1148,8 @@ function fillInfo(){const X=TGT,W=X.W,src=S.live?X.src:null,liveOk=!!src&&src.ki
   if(S.live&&!liveOk)cond=wxFailed?'Charleroi':'Relevé en cours';
   $('#iCond').textContent=cond;$('#iTemp').textContent=hasT?Math.round(W.temp)+'°':fmtHd(X.hd);
   $('#iPair').style.display=hasT?'':'none';if(hasT){$('#iApp').textContent=Math.round(W.app)+'°';$('#iHum').textContent=Math.round(W.hum)+' %'}
-  const st=X.sun;let s='';if(st.set){if(X.date<st.set)s=`Le soleil se couche à ${fmtT(st.set)}<small>dans ${fmtDur(st.set-X.date)}</small>`;
-    else{const tm=sunTimes(new Date(X.date.getTime()+864e5));s=`Le soleil s'est couché à ${fmtT(st.set)}<small>${tm.rise?'Lever demain à '+fmtT(tm.rise):''}</small>`}}
+  const st=X.sun;let s='';if(st.set){if(X.date<st.set)s=`<span class="nw">Le soleil se couche</span> <span class="nw">à ${fmtT(st.set)}</span><small>dans ${fmtDur(st.set-X.date)}</small>`;
+    else{const tm=sunTimes(new Date(X.date.getTime()+864e5));s=`<span class="nw">Le soleil s'est couché</span> <span class="nw">à ${fmtT(st.set)}</span><small>${tm.rise?'Lever demain <span class="nw">à '+fmtT(tm.rise)+'</span>':''}</small>`}}
   $('#iSun').innerHTML=s;
   const lines=[];if(hasT&&W.wind!=null)lines.push(W.wind<2?'Pas de vent':`Vent ${W.wdir!=null?dirName(W.wdir)+', ':''}${Math.round(W.wind)} km/h`);lines.push(moonName(X.mp));$('#iMinor').innerHTML=lines.join('<br>');
   let note='';if(liveOk)note=src.kind==='now'?`Relevé à ${fmtT(new Date(src.at))}, Charleroi`:`D'après les prévisions de ${fmtT(new Date(src.at))}, Charleroi`;
