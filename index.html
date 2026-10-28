@@ -103,6 +103,20 @@ button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .sunset small{display:block;font-family:"Zen Kaku Gothic New","Hiragino Sans",Arial,sans-serif;font-size:13px;color:var(--muted);margin-top:.3em}
 .minor{font-size:13px;color:var(--muted);line-height:1.65;margin-top:.8em}
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:.7em;opacity:.9}
+/* Petits cercles (téléphones) : tout le texte reste à l'intérieur du rond */
+@media (max-width:600px) and (max-aspect-ratio:1/1){
+  .cond{font-size:clamp(14px,calc(var(--cs) * .05),17px)}
+  .temp{font-size:clamp(46px,calc(var(--cs) * .19),64px);margin:.08em 0 .1em}
+  .sunset{margin-top:.7em;font-size:clamp(16px,calc(var(--cs) * .056),19px)}
+  .minor{margin-top:.55em;line-height:1.5}
+  .note{margin:.45em auto 0;max-width:88%;line-height:1.4;text-wrap:balance}}
+@media (max-width:600px) and (max-height:700px) and (max-aspect-ratio:1/1){
+  .temp{font-size:calc(var(--cs) * .17)}
+  .pair{font-size:13px}
+  .sunset{margin-top:.55em}
+  .sunset small{margin-top:.15em}
+  .minor{margin-top:.45em;line-height:1.42}
+  .note{margin-top:.35em}}
 #fcast{position:fixed;z-index:6;left:50%;top:calc(var(--itop) + var(--cs) / 2 + 16px);width:min(calc(100vw - 32px),560px);
   max-height:calc(100% - var(--itop) - var(--cs) / 2 - 24px - env(safe-area-inset-bottom,0px));overflow:auto;
   background:var(--paper);-webkit-backdrop-filter:blur(16px) saturate(1.1);backdrop-filter:blur(16px) saturate(1.1);border-radius:24px;padding:14px 12px 12px;
