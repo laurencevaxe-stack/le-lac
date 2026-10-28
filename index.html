@@ -126,6 +126,10 @@ button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .fnote{margin:10px 8px 0;font-size:11.5px;line-height:1.45;color:var(--muted);text-align:center}
 #fcast.empty .fhours,#fcast.empty .fdays,#fcast.empty .fnote{display:none}
 #fcast.empty .fsum{margin-bottom:0;font-size:15px;color:var(--muted)}
+/* Ouverture des prévisions : les heures puis les jours montent l'un après l'autre (une fois par ouverture) */
+#fcast.stag .fh{animation:fIn .5s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(.38s + var(--k,0) * 45ms)}
+#fcast.stag .fd{animation:fIn .5s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(.8s + var(--k,0) * 70ms)}
+@keyframes fIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media (min-aspect-ratio:1/1){
   :root{--cs:min(40vw,430px,74vh)}
   #info{left:30%;top:50%}
@@ -971,6 +975,8 @@ const Snd={ctx:null,master:null,L:null,vol:store.get('vol',.7),muted:store.get('
   thunder(delay){if(!this.ok())return;const c=this.ctx,t=c.currentTime+delay,s=c.createBufferSource();s.buffer=this.brown;const lp=c.createBiquadFilter();lp.type='lowpass';lp.frequency.value=160+(3.5-delay)*70;
     const g=c.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.55,t+.1+delay*.08);g.gain.exponentialRampToValueAtTime(.16,t+1.3);g.gain.exponentialRampToValueAtTime(.0001,t+4.5+Math.random()*2);
     s.connect(lp);lp.connect(g);g.connect(this.master);this.free(s,lp,g);s.start(t,Math.random()*2);s.stop(t+7.5)}};
+/* Un son qui échoue (navigateur, appareil) ne doit jamais bloquer l'image ni les gestes. */
+for(const k of Object.keys(Snd))if(typeof Snd[k]==='function'){const f=Snd[k];Snd[k]=function(...a){try{return f.apply(this,a)}catch(e){if(!Snd._err){Snd._err=1;console.error('Le Lac, son :',e)}}}}
 function soundMix(X){const W=X.W,day=X.alt>-4,night=X.alt<-6,wet=W.rain>.15||W.snow>.2||W.thunder;
   let birds=0;if(day&&!W.thunder){birds={printemps:1,ete:.55,automne:.22,hiver:.1}[X.season];if(X.period==='aube')birds*=2.2;if(W.rain>.15)birds*=.2;if(W.fog>.8)birds*=.6}
   return{rain:clamp(W.rain),wind:clamp((W.wind-4)/50),birds,insects:X.season==='ete'&&X.alt>10&&!wet&&(W.temp==null||W.temp>17),
@@ -1193,23 +1199,26 @@ function fillForecast(force){const box=$('#fcast'),now=Date.now();
   const start=Math.ceil(now/3600e3)*3600e3;let html='';
   for(let k=0;k<14;k++){const t=start+k*3600e3,h=FC.hours.find(x=>x.t===t);if(!h||h.temp==null)continue;
     const night=sunPos(new Date(t-1800e3)).alt<-.833,pp=h.pp!=null&&h.pp>=20?Math.round(h.pp):null,lbl=WX_LABEL[h.code]||'';
-    html+=`<button class="fh" type="button" data-t="${t}" aria-label="${bxl(new Date(t)).h} heures : ${Math.round(h.temp)} degrés${lbl?', '+lbl.toLowerCase():''}${pp!=null?', '+pp+' % de risque de pluie':''}. Voir le lac à cette heure.">`+
+    html+=`<button class="fh" type="button" style="--k:${k}" data-t="${t}" aria-label="${bxl(new Date(t)).h} heures : ${Math.round(h.temp)} degrés${lbl?', '+lbl.toLowerCase():''}${pp!=null?', '+pp+' % de risque de pluie':''}. Voir le lac à cette heure.">`+
       `<span class="fhh">${hh(t)}</span>${glyph(h.code,night)}<span class="fht">${Math.round(h.temp)}°</span><span class="fhp">${pp!=null?pp+' %':''}</span></button>`}
   $('#fHours').innerHTML=html;$('#fHours').scrollLeft=0;
   const today=bxl(new Date(now));let dh='';
   for(const d of FC.days){const b=bxl(new Date(d.t+12*3600e3));if(Date.UTC(b.y,b.m-1,b.d)<Date.UTC(today.y,today.m-1,today.d)||d.tmax==null)continue;
     const name=b.d===today.d&&b.m===today.m?"Auj.":dayFmt.format(new Date(d.t+12*3600e3)).replace(/^./,m=>m.toUpperCase());
-    dh+=`<div class="fd"><span class="fdn">${name}</span>${glyph(d.code,false)}<span class="fdt">${Math.round(d.tmax)}° <span>${Math.round(d.tmin)}°</span></span></div>`;
+    dh+=`<div class="fd" style="--k:${dh.split('class="fd"').length-1}"><span class="fdn">${name}</span>${glyph(d.code,false)}<span class="fdt">${Math.round(d.tmax)}° <span>${Math.round(d.tmin)}°</span></span></div>`;
     if(dh.split('class="fd"').length>4)break}
   $('#fDays').innerHTML=dh;
   $('#fNote').textContent=`Prévisions mises à jour à ${fmtT(new Date(FC.at))}. Touchez une heure pour voir le lac à ce moment-là.`}
 function infoFrom(p){const cs=getComputedStyle(p),[wx,wy]=toScreen(345,560),k=(236*sc)/(p.offsetWidth||300);
   return`translate(calc(-50% + ${wx-parseFloat(cs.left)}px),calc(-50% + ${wy-parseFloat(cs.top)}px)) scale(${k.toFixed(3)})`}
-function openInfo(){if(S.go||S.hold||S.ret||S.toff){S.go=S.hold=S.ret=null;S.toff=0;$('#hud').classList.remove('scrub');update();snapEnv()}
+let infoAt=0;
+function openInfo(){infoAt=performance.now();if(S.go||S.hold||S.ret||S.toff){S.go=S.hold=S.ret=null;S.toff=0;$('#hud').classList.remove('scrub');update();snapEnv()}
   fillInfo();const p=$('#info');
   p.style.transition='none';p.style.transform=infoFrom(p);p.getBoundingClientRect();
   p.style.transition='';p.classList.add('open');p.style.transform='';$('#shade').classList.add('on');infoOpen=true;Snd.chime();
-  if(S.live){fillForecast(true);$('#fcast').classList.add('open')}}
+  if(S.live){fillForecast(true);const fc=$('#fcast');fc.classList.add('open');
+    if(!reduced){fc.classList.remove('stag');void fc.offsetWidth;fc.classList.add('stag');clearTimeout(stagT);stagT=setTimeout(()=>fc.classList.remove('stag'),1800)}}}
+let stagT=0;
 function closeAll(){if(infoOpen){const p=$('#info');p.style.transform=infoFrom(p);p.classList.remove('open');$('#fcast').classList.remove('open');infoOpen=false}
   if(setOpen){$('#settings').classList.remove('open');setOpen=false}$('#shade').classList.remove('on')}
 function handleTap(x,y){if(!E)return;Snd.init();const d=(a,b)=>Math.hypot(x-a,y-b);const pan=clamp((x-500)/500,-1,1);
@@ -1255,9 +1264,12 @@ function moveScrub(cx){S.toff=clamp(S.scrub.base+(cx-S.scrub.x0)/VW*14,-12,12);n
 function endScrub(){S.scrub=null;if(Math.abs(S.toff)<.02){S.toff=0;$('#hud').classList.remove('scrub');update();return}S.ret={from:S.toff,t0:performance.now(),dur:1800+Math.abs(S.toff)*420}}
 function setupGestures(){const st=$('#stage');let G=null;
   const inPoem=(cx,cy)=>{for(const l of document.querySelectorAll('#poem .ln')){const r=l.getBoundingClientRect();if(r.width&&cx>r.left-8&&cx<r.right+8&&cy>r.top-6&&cy<r.bottom+6)return true}return false};
-  st.addEventListener('pointerdown',e=>{if(!entered||infoOpen||setOpen||G||!E)return;if(S.go||S.hold)returnNow(performance.now());const[x,y]=toView(e.clientX,e.clientY);Snd.init();const zone=inPoem(e.clientX,e.clientY)?'poem':zoneOf(x,y);
+  const safe=f=>{try{f()}catch(err){console.error('Le Lac :',err)}};
+  const drop=()=>{if(!G)return;const g=G;G=null;if(g.mode==='scrub')safe(endScrub)};
+  st.addEventListener('pointerdown',e=>{drop();/* un geste précédent jamais terminé (doigt perdu, second doigt) : on repart à zéro */
+    if(!entered||infoOpen||setOpen||!E)return;if(S.go||S.hold)safe(()=>returnNow(performance.now()));const[x,y]=toView(e.clientX,e.clientY);Snd.init();const zone=inPoem(e.clientX,e.clientY)?'poem':zoneOf(x,y);
     G={id:e.pointerId,cx:e.clientX,cy:e.clientY,x,y,lx:x,ly:y,zone,mode:null,acc:0,ls:0};try{st.setPointerCapture(e.pointerId)}catch(_){}
-    if(zone==='water'){handleTap(x,y);G.mode='wake'}else if(zone==='obj'){handleTap(x,y);G.mode='done'}});
+    if(zone==='water'){G.mode='wake';safe(()=>handleTap(x,y))}else if(zone==='obj'){G.mode='done';safe(()=>handleTap(x,y))}});
   st.addEventListener('pointermove',e=>{if(!G||e.pointerId!==G.id)return;const[x,y]=toView(e.clientX,e.clientY);
     if(G.mode==='wake'){const dx=x-G.lx,dy=y-G.ly,dist=Math.hypot(dx,dy);if(dist<.4)return;let s0=G.acc;G.acc+=dist;
       for(let p=9-s0;p<=dist;p+=9){const k=p/dist;wakeAt(G.lx+dx*k,G.ly+dy*k)}G.acc%=9;G.lx=x;G.ly=y;
@@ -1265,8 +1277,11 @@ function setupGestures(){const st=$('#stage');let G=null;
     if(G.zone==='poem'){if(G.mode===null&&Math.hypot(e.clientX-G.cx,e.clientY-G.cy)>10){if(G.y>WY+6){G.mode='wake';wakeAt(G.x,G.y)}else G.mode='done'}return}
     if(G.mode===null){const dx=e.clientX-G.cx,dy=e.clientY-G.cy;if(Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.1){G.mode='scrub';startScrub(e.clientX)}else if(Math.hypot(dx,dy)>28)G.mode='done'}
     if(G.mode==='scrub')moveScrub(e.clientX)});
-  const end=e=>{if(!G||e.pointerId!==G.id)return;if(G.mode===null&&e.type==='pointerup'){if(G.zone==='poem'){if(TGT)pickPoem(TGT,true)}else handleTap(G.x,G.y)}if(G.mode==='scrub')endScrub();G=null};
-  st.addEventListener('pointerup',end);st.addEventListener('pointercancel',end)}
+  const end=e=>{if(!G||e.pointerId!==G.id)return;const g=G;G=null;
+    if(g.mode===null&&e.type==='pointerup'){if(g.zone==='poem'){if(TGT)safe(()=>pickPoem(TGT,true))}else safe(()=>handleTap(g.x,g.y))}if(g.mode==='scrub')safe(endScrub)};
+  window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',end,true);
+  st.addEventListener('lostpointercapture',e=>{if(G&&e.pointerId===G.id&&G.mode!==null)drop()});
+  window.addEventListener('blur',drop);document.addEventListener('visibilitychange',()=>{if(document.hidden)drop()})}
 
 /* ---------- Grain de papier (estampe) ---------- */
 function makeGrain(){try{const N=320,c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d'),im=g.createImageData(N,N),d=im.data;
@@ -1284,7 +1299,8 @@ function setup(){
   $('#veil').addEventListener('click',()=>{if(entered)return;entered=true;startTilt();$('#veil').classList.add('gone');Snd.init();Snd.setMaster();$('#soundBtn').classList.toggle('muted',Snd.muted);
     setTimeout(()=>Snd.bowl(),650);const p=$('#poem');setTimeout(()=>{p.classList.add('show');const txt=poemCur||(poemKey?poemText(poemKey):'');if(txt)inkPoem(txt)},1700);setTimeout(()=>{$('#veil').style.display='none'},2800)});
   
-  $('#shade').addEventListener('click',closeAll);$('#info').addEventListener('click',closeAll);
+  const closeTap=()=>{if(performance.now()-infoAt<600)return;closeAll()};
+  $('#shade').addEventListener('click',closeTap);$('#info').addEventListener('click',closeTap);
   $('#fHours').addEventListener('click',e=>{const b=e.target.closest('.fh');if(!b)return;closeAll();glideTo(+b.dataset.t)});
   $('#seal').addEventListener('click',()=>{if(setOpen)return closeAll();closeAll();syncSettings();$('#settings').classList.add('open');$('#shade').classList.add('on');setOpen=true});
   $('#closeSet').addEventListener('click',closeAll);
