@@ -103,6 +103,7 @@ button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .sunset small{display:block;font-family:"Zen Kaku Gothic New","Hiragino Sans",Arial,sans-serif;font-size:13px;color:var(--muted);margin-top:.3em}
 .minor{font-size:13px;color:var(--muted);line-height:1.65;margin-top:.8em}
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:.7em;opacity:.9}
+.wxok{font:inherit;font-size:12px;color:inherit;background:var(--paperSolid,#fff);border:1px solid currentColor;border-radius:999px;padding:.25em .9em;margin-left:.3em;cursor:pointer;min-height:30px}
 /* Petits cercles (téléphones) : tout le texte reste à l'intérieur du rond */
 @media (max-width:600px) and (max-aspect-ratio:1/1){
   .cond{font-size:clamp(14px,calc(var(--cs) * .05),17px)}
@@ -139,8 +140,14 @@ button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .fd{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:13px;font-variant-numeric:tabular-nums;min-width:0}
 .fdn{color:var(--muted);font-size:12.5px}
 .fdt span{color:var(--muted)}
+.fextra{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:12px 4px 0;padding-top:10px;border-top:1px solid var(--line)}
+.fx{font-size:12.5px;line-height:1.3;padding:5px 10px;border-radius:999px;border:1px solid var(--line);color:var(--ink);white-space:nowrap}
+.fx i{font-style:normal;color:var(--muted)}
+.fyear{flex-basis:100%;margin:6px 8px 0;font-family:"Shippori Mincho","Hiragino Mincho ProN",Georgia,serif;font-size:14.5px;line-height:1.45;color:var(--muted);text-align:center;text-wrap:balance}
+.fextra:empty{display:none}
+.fnote a{color:inherit}
 .fnote{margin:10px 8px 0;font-size:11.5px;line-height:1.45;color:var(--muted);text-align:center}
-#fcast.empty .fhours,#fcast.empty .fdays,#fcast.empty .fnote{display:none}
+#fcast.empty .fhours,#fcast.empty .fdays,#fcast.empty .fextra,#fcast.empty .fnote{display:none}
 #fcast.empty .fsum{margin-bottom:0;font-size:15px;color:var(--muted)}
 /* Ouverture des prévisions : les heures puis les jours montent l'un après l'autre (une fois par ouverture) */
 #fcast.stag .fh{animation:fIn .5s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(.38s + var(--k,0) * 45ms)}
@@ -325,6 +332,7 @@ input[type=range]{width:100%;accent-color:var(--seal);margin:0}
   <p class="fsum" id="fSum"></p>
   <div class="fhours" id="fHours"></div>
   <div class="fdays" id="fDays"></div>
+  <div class="fextra" id="fExtra"></div>
   <p class="fnote" id="fNote"></p>
 </section>
 
@@ -432,7 +440,8 @@ function presetWx(name,season){const p=PRESETS[name]||PRESETS.voile,pr=wxProfile
   if(season==='hiver'&&(name==='clair'||name==='brume'||name==='voile'))temp=-3;
   return{code:p.code,cloud:p.cloud,fog:p.fog,wind:p.wind,wdir:250,rain:pr.rain,snow:pr.snow,thunder:pr.thunder,temp,hum:p.hum,app:Math.round(temp-p.wind/12)}}
 function liveWx(L,b){const pr=wxProfile(L.code);let fog=pr.fogBoost?1:.1+clamp((L.hum-78)/22)*.5;if(b.hd>4&&b.hd<10.5&&L.hum>82)fog+=.2;
-  return{code:L.code,cloud:Math.max(L.cloud,pr.minCloud),fog:clamp(fog),wind:L.wind,wdir:L.wdir,rain:pr.rain,snow:pr.snow,thunder:pr.thunder,temp:L.temp,hum:L.hum,app:L.app}}
+  if(L.vis!=null){const vf=L.vis<1000?1:L.vis<10000?1-Math.log10(L.vis/1000)*.75:.08;fog=Math.max(Math.min(fog,vf+.15),vf)}
+  return{code:L.code,cloud:Math.max(L.cloud,pr.minCloud),fog:clamp(fog),wind:L.wind,wdir:L.wdir,rain:pr.rain,snow:pr.snow,thunder:pr.thunder,temp:L.temp,hum:L.hum,app:L.app,vis:L.vis}}
 function fallbackWx(b){const morning=b.hd>4.5&&b.hd<10.5;return{code:null,cloud:.4,fog:morning?.55:.3,wind:9,wdir:null,rain:0,snow:0,thunder:false,temp:null,hum:null,app:null}}
 /* Relevé actuel (WX) et prévisions heure par heure (FC). Les prévisions prennent le relais quand le relevé vieillit,
    et servent quand on fait glisser le ciel vers l'avenir. */
@@ -441,19 +450,19 @@ let FC=store.get('fc',null);if(FC&&(!FC.hours||Date.now()-FC.at>36*3600e3))FC=nu
 let wxFailed=false;
 const num=v=>v==null||isNaN(v)?null:+v;
 function ingestOpenMeteo(j){const now=Date.now();
-  if(j.current){const c=j.current;WX={code:num(c.weather_code),temp:num(c.temperature_2m),hum:num(c.relative_humidity_2m),app:num(c.apparent_temperature),cloud:(num(c.cloud_cover)??50)/100,wind:num(c.wind_speed_10m)??0,wdir:num(c.wind_direction_10m),at:now};store.set('wx',WX)}
+  if(j.current){const c=j.current;WX={code:num(c.weather_code),temp:num(c.temperature_2m),hum:num(c.relative_humidity_2m),app:num(c.apparent_temperature),cloud:(num(c.cloud_cover)??50)/100,wind:num(c.wind_speed_10m)??0,wdir:num(c.wind_direction_10m),vis:num(c.visibility),at:now};store.set('wx',WX)}
   const H=j.hourly,D=j.daily;
   if(H&&H.time){const g=(k,i)=>H[k]?num(H[k][i]):null;
     const hours=H.time.map((t,i)=>({t:t*1000,code:g('weather_code',i),temp:g('temperature_2m',i),app:g('apparent_temperature',i),hum:g('relative_humidity_2m',i),
-      cloud:(g('cloud_cover',i)??50)/100,wind:g('wind_speed_10m',i)??0,wdir:g('wind_direction_10m',i),pp:g('precipitation_probability',i),pr:g('precipitation',i)}));
-    const days=D&&D.time?D.time.map((t,i)=>({t:t*1000,code:num(D.weather_code[i]),tmax:num(D.temperature_2m_max[i]),tmin:num(D.temperature_2m_min[i]),pp:D.precipitation_probability_max?num(D.precipitation_probability_max[i]):null})):[];
+      cloud:(g('cloud_cover',i)??50)/100,wind:g('wind_speed_10m',i)??0,wdir:g('wind_direction_10m',i),pp:g('precipitation_probability',i),pr:g('precipitation',i),vis:g('visibility',i)}));
+    const days=D&&D.time?D.time.map((t,i)=>({t:t*1000,code:num(D.weather_code[i]),tmax:num(D.temperature_2m_max[i]),tmin:num(D.temperature_2m_min[i]),pp:D.precipitation_probability_max?num(D.precipitation_probability_max[i]):null,uv:D.uv_index_max?num(D.uv_index_max[i]):null})):[];
     FC={at:now,hours,days};store.set('fc',FC)}
   wxFailed=false}
 /* Valeurs prévues à un instant donné (les heures d'Open-Meteo décrivent l'heure qui précède). */
 function fcAt(ms){if(!FC||!FC.hours.length)return null;const A=FC.hours;if(ms<A[0].t-1800e3||ms>A[A.length-1].t)return null;
   let i=0;while(i<A.length-1&&A[i+1].t<=ms)i++;const a=A[i],b=A[Math.min(i+1,A.length-1)],k=b===a?0:clamp((ms-a.t)/(b.t-a.t));
   const L=(x,y)=>x==null?y:y==null?x:lerp(x,y,k);const n=k>0?b:a;if(a.temp==null&&b.temp==null)return null;
-  return{code:n.code,temp:L(a.temp,b.temp),app:L(a.app,b.app),hum:L(a.hum,b.hum),cloud:L(a.cloud,b.cloud),wind:L(a.wind,b.wind),wdir:n.wdir,pp:n.pp,pr:n.pr}}
+  return{code:n.code,temp:L(a.temp,b.temp),app:L(a.app,b.app),hum:L(a.hum,b.hum),cloud:L(a.cloud,b.cloud),wind:L(a.wind,b.wind),wdir:n.wdir,pp:n.pp,pr:n.pr,vis:L(a.vis,b.vis)}}
 /* Quelle source décrit le temps à cet instant : relevé frais, prévision, ou rien. */
 function liveAt(ms){const now=Date.now(),near=Math.abs(ms-now)<20*60e3;
   if(near&&WX&&now-WX.at<45*60e3)return{L:WX,kind:'now',at:WX.at};
@@ -462,18 +471,112 @@ function liveAt(ms){const now=Date.now(),near=Math.abs(ms-now)<20*60e3;
   if(WX&&now-WX.at<3*3600e3)return{L:WX,kind:near?'now':'approx',at:WX.at};
   return null}
 const WX_URL='https://api.open-meteo.com/v1/forecast?latitude=50.4108&longitude=4.4446'+
-  '&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m'+
-  '&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m'+
-  '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max'+
+  '&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility'+
+  '&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility'+
+  '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max'+
   '&past_hours=12&forecast_hours=48&forecast_days=5&timezone=Europe%2FBrussels&timeformat=unixtime&wind_speed_unit=kmh';
-let wxBusy=false;
-async function fetchWeather(){if(wxBusy)return;wxBusy=true;
-  try{const ctrl=typeof AbortController!=='undefined'?new AbortController():null;const to=setTimeout(()=>ctrl&&ctrl.abort(),9000);
-    const r=await fetch(WX_URL,{signal:ctrl?ctrl.signal:undefined,cache:'no-store'});clearTimeout(to);if(!r.ok)throw new Error('http');
-    ingestOpenMeteo(await r.json())}
+let wxBusy=false,WXSRC=store.get('wxsrc','om'),wxMsg='',wxTap=false,wxRetried=false;
+/* Dans claude.ai, la page ne peut pas appeler un autre site : elle passe alors par le connecteur AccuWeather
+   de François (gratuit). Ailleurs (GitHub Pages), elle appelle Open-Meteo directement. */
+const ACCU='AccuWeather',ACCU_KEY='958852';
+const mcpReady=(typeof window!=='undefined'&&window.claude&&typeof window.claude.use==='function')?window.claude.use('mcp').catch(()=>null):Promise.resolve(null);
+const ACCU_WMO={1:0,2:1,3:2,4:2,5:2,6:3,7:3,8:3,11:45,12:80,13:80,14:80,15:95,16:95,17:95,18:63,19:85,20:85,21:85,22:73,23:73,24:66,25:77,26:66,29:67,30:0,31:0,32:2,33:0,34:1,35:2,36:2,37:2,38:3,39:80,40:80,41:95,42:95,43:85,44:73};
+const DIRS={N:0,NNE:22.5,NE:45,ENE:67.5,E:90,ESE:112.5,SE:135,SSE:157.5,S:180,SSO:202.5,SO:225,OSO:247.5,O:270,ONO:292.5,NO:315,NNO:337.5,SSW:202.5,SW:225,WSW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+const pnum=v=>{if(v==null)return null;if(typeof v==='number')return v;const m=String(v).replace(',','.').match(/-?\d+(\.\d+)?/);return m?+m[0]:null};
+const accuCode=i=>i==null?null:(ACCU_WMO[i]??null);
+function ingestAccu(cur,hr,dy){const now=Date.now();
+  const c=cur&&cur.currentConditions;
+  if(c){const x=c.extended||{},wd=x.wind?String(x.wind).trim().split(/\s+/)[0].toUpperCase():null,vk=pnum(x.visibility);
+    WX={code:accuCode(c.iconCode),temp:num(c.temperatureValue),hum:num(x.humidityValue),app:num(c.realFeelValue),cloud:(pnum(x.cloudCover)??50)/100,
+      wind:num(x.windValue)??0,wdir:wd&&DIRS[wd]!=null?DIRS[wd]:null,vis:vk!=null?vk*1000:null,at:now};store.set('wx',WX)}
+  const q=cur&&cur.currentAirQuality;if(q&&q.category){AQ={at:now,aqi:null,txt:String(q.category).toLowerCase(),pol:{}};store.set('aq',AQ)}
+  const H=hr&&hr.hourlyForecast;
+  if(Array.isArray(H)&&H.length){const hours=H.map(h=>{const x=h.extended||{};return{t:(num(h.epoch)??Date.parse(h.date)/1000)*1000,code:accuCode(h.icon),temp:num(h.temperatureValue),app:num(h.realFeelValue),
+      hum:pnum(x.humidity),cloud:(num(x.cloudCoverValue)??50)/100,wind:num(x.windValue)??0,wdir:num(x.windDegrees),pp:pnum(h.precip),pr:h.totalLiquid?num(h.totalLiquid.Value):null,vis:x.visibilityValue!=null?num(x.visibilityValue)*1000:null}}).filter(h=>h.t);
+    const D=dy&&dy.dailyForecast,days=Array.isArray(D)?D.map(d=>{const a=d.day||{},n=d.night||{};const t=(num(d.epoch)??Date.parse(d.date)/1000)*1000;
+      return{t,code:accuCode(a.icon),tmax:num(a.temperature),tmin:num(n.temperature),pp:Math.max(pnum(a.precip)??0,pnum(n.precip)??0),uv:a.extended&&a.extended.uv?num(a.extended.uv.value):null}}):(FC?FC.days:[]);
+    FC={at:now,hours,days};store.set('fc',FC)}
+  WXSRC='accu';store.set('wxsrc','accu');wxFailed=false;wxMsg='';wxTap=false}
+/* Un message clair selon la raison de l'échec du connecteur. */
+function accuMsg(e){const c=e&&e.code;wxTap=false;
+  if(c==='server_not_connected'||c==='server_not_found'||c==='selection_required')return"Pour la météo en direct ici, ajoute le connecteur AccuWeather dans claude.ai (Réglages, Connecteurs).";
+  if(c==='needs_reauth')return"Le connecteur AccuWeather doit être reconnecté dans claude.ai (Réglages, Connecteurs).";
+  if(c==='approval_required'||c==='not_in_manifest'||c==='consent_required'){wxTap=true;return"La météo en direct attend ton autorisation pour AccuWeather."}
+  if(c==='blocked_by_policy')return"AccuWeather est bloqué pour ce compte. Le décor suit l'heure, le soleil, la lune et la saison.";
+  if(c==='forme_inattendue')return"AccuWeather a répondu, mais sous une forme que la page ne sait pas encore lire.";
+  return"AccuWeather ne répond pas pour l'instant. Nouvel essai dans quelques minutes."}
+/* Le connecteur peut renvoyer ses chiffres à plusieurs endroits du résultat : on les cherche partout. */
+function accuData(r,key){if(!r)return null;const cands=[r.payload,r.structuredContent];
+  if(Array.isArray(r.content))for(const bl of r.content)if(bl&&typeof bl.text==='string')cands.push(bl.text);
+  for(let c of cands){if(typeof c==='string'){try{c=JSON.parse(c)}catch(e){continue}}
+    if(c&&typeof c==='object'){if(c[key])return c;for(const k in c){const v=c[k];if(v&&typeof v==='object'&&v[key])return v}}}
+  return null}
+/* Journal du dernier essai : visible en petit dans la page, et gardé pour que Claude puisse le relire. */
+const dbReady=(typeof window!=='undefined'&&window.claude&&typeof window.claude.use==='function')?window.claude.use('db').catch(()=>null):Promise.resolve(null);
+let DIAG=[],hrRetry=0;
+function diagCode(){const bad=DIAG.find(d=>!d.ok);return bad?bad.code:''}
+async function saveDiag(){try{const db=await dbReady;if(!db)return;
+  await db.doc('diag/last').set({at:new Date().toISOString(),ua:navigator.userAgent.slice(0,160),steps:DIAG})}catch(e){}}
+async function accuCall(mcp,tool,key,opt){const inp={queryParams:{locationKey:ACCU_KEY,unit:'metric',lang:'fr'}},t0=Date.now();
+  try{const r=await mcp.callTool(ACCU,tool,inp,opt);const d=accuData(r,key);
+    DIAG.push({tool,ok:!!d,ms:Date.now()-t0,code:d?'':'forme_inattendue',keys:r?Object.keys(r).join(','):'',pkeys:r&&r.payload&&typeof r.payload==='object'?Object.keys(r.payload).slice(0,8).join(','):typeof(r&&r.payload)});
+    return d}
+  catch(e){DIAG.push({tool,ok:false,ms:Date.now()-t0,code:(e&&e.code)||'inconnu',msg:String(e&&e.message||e).slice(0,200),retryable:!!(e&&e.retryable)});throw e}}
+/* Un appel après l'autre : une seule demande d'autorisation à la fois, et ce qui arrive est gardé même si la suite échoue. */
+async function fetchAccu(mcp){DIAG=[];const o={cache:{staleTime:9*60e3,gcTime:3*3600e3}},od={cache:{staleTime:55*60e3,gcTime:6*3600e3}};
+  let cur=null,hr=null,dy=null,err=null;
+  try{cur=await accuCall(mcp,'widgets-current-claude','currentConditions',o)}catch(e){err=e}
+  if(!err||cur){try{hr=await accuCall(mcp,'widgets-hourly-claude','hourlyForecast',o)}catch(e){err=err||e}}
+  if(hr){try{dy=await accuCall(mcp,'widgets-daily-claude','dailyForecast',od)}catch(e){}}
+  saveDiag();
+  if(hr)hrRetry=0;else if(cur&&err&&err.retryable&&hrRetry<2){hrRetry++;setTimeout(fetchWeather,(err.retryAfterMs||0)+3000+Math.random()*2000)}
+  if(cur||hr){ingestAccu(cur,hr,dy);return}
+  throw err||{code:'forme_inattendue',message:'réponse illisible'}}
+async function fetchOpenMeteo(){const ctrl=typeof AbortController!=='undefined'?new AbortController():null;const to=setTimeout(()=>ctrl&&ctrl.abort(),9000);
+  try{const r=await fetch(WX_URL,{signal:ctrl?ctrl.signal:undefined,cache:'no-store'});if(!r.ok)throw new Error('http');
+    ingestOpenMeteo(await r.json());WXSRC='om';store.set('wxsrc','om');wxMsg='';wxTap=false}finally{clearTimeout(to)}}
+async function fetchWeather(){if(wxBusy)return;wxBusy=true;let retry=null;
+  try{const mcp=await mcpReady;
+    if(mcp){try{await fetchAccu(mcp)}
+      catch(e){wxMsg=accuMsg(e);if(e&&e.retryable&&!wxRetried){wxRetried=true;retry=(e.retryAfterMs||0)+2500+Math.random()*2500}
+        try{await fetchOpenMeteo()}catch(e2){throw e}}}
+    else await fetchOpenMeteo();
+    wxRetried=false}
   catch(e){wxFailed=true;if(WX&&Date.now()-WX.at>3*3600e3)WX=null}
   finally{wxBusy=false}
-  update()}
+  update();if(infoOpen){fillInfo();fillForecast(true)}
+  if(retry)setTimeout(fetchWeather,retry);
+  if(WXSRC!=='accu'){fetchAir();fetchYear()}}
+
+/* ---------- Air, pollen et souvenir d'il y a un an (Open-Meteo, gratuit, sans clé) ---------- */
+let AQ=store.get('aq',null);if(AQ&&Date.now()-AQ.at>3*3600e3)AQ=null;
+let YR=store.get('yr',null);
+async function getJSON(url){const ctrl=typeof AbortController!=='undefined'?new AbortController():null;const to=setTimeout(()=>ctrl&&ctrl.abort(),9000);
+  try{const r=await fetch(url,{signal:ctrl?ctrl.signal:undefined,cache:'no-store'});if(!r.ok)throw new Error('http');return await r.json()}finally{clearTimeout(to)}}
+let aqBusy=false;
+async function fetchAir(){if(aqBusy||(AQ&&Date.now()-AQ.at<50*60e3))return;aqBusy=true;
+  try{const j=await getJSON(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LON}&current=european_aqi,alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,ragweed_pollen&timezone=Europe%2FBrussels`);
+    const c=j.current||{};AQ={at:Date.now(),aqi:num(c.european_aqi),pol:{aulne:num(c.alder_pollen),bouleau:num(c.birch_pollen),'graminées':num(c.grass_pollen),armoise:num(c.mugwort_pollen),ambroisie:num(c.ragweed_pollen)}};store.set('aq',AQ);if(infoOpen)fillForecast(true)}
+  catch(e){}finally{aqBusy=false}}
+let yrBusy=false;
+async function fetchYear(){const t=bxl(new Date()),key=`${t.y-1}-${String(t.m).padStart(2,'0')}-${String(t.m===2&&t.d===29?28:t.d).padStart(2,'0')}`;
+  if(yrBusy||(YR&&YR.key===key))return;yrBusy=true;
+  try{const j=await getJSON(`https://archive-api.open-meteo.com/v1/archive?latitude=${LAT}&longitude=${LON}&start_date=${key}&end_date=${key}&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=Europe%2FBrussels`);
+    const H=j.hourly||{},D=j.daily||{};YR={key,temps:(H.temperature_2m||[]).map(num),codes:(H.weather_code||[]).map(num),tmax:D.temperature_2m_max?num(D.temperature_2m_max[0]):null,tmin:D.temperature_2m_min?num(D.temperature_2m_min[0]):null};store.set('yr',YR);if(infoOpen)fillForecast(true)}
+  catch(e){}finally{yrBusy=false}}
+const AQI_TXT=v=>v<=20?'bon':v<=40?'assez bon':v<=60?'moyen':v<=80?'médiocre':v<=100?'très médiocre':'mauvais';
+const UV_TXT=v=>v<3?'faible':v<6?'modéré':v<8?'élevé':v<11?'très élevé':'extrême';
+function extraHtml(now){let h='';
+  if(AQ&&now-AQ.at<3*3600e3){
+    if(AQ.aqi!=null)h+=`<span class="fx"><i>Air</i> ${AQI_TXT(AQ.aqi)}</span>`;else if(AQ.txt)h+=`<span class="fx"><i>Air</i> ${AQ.txt}</span>`;
+    let best=null;for(const k in (AQ.pol||{})){const v=AQ.pol[k];if(v!=null&&v>=10&&(!best||v>best[1]))best=[k,v]}
+    if(best)h+=`<span class="fx"><i>Pollen</i> ${best[0]} ${best[1]>=50?'élevé':'modéré'}</span>`}
+  const t=bxl(new Date(now)),d=FC&&FC.days?FC.days.find(x=>{const b=bxl(new Date(x.t+12*3600e3));return b.d===t.d&&b.m===t.m}):null;
+  if(d&&d.uv!=null&&d.uv>=3&&t.hd<17)h+=`<span class="fx"><i>UV</i> ${Math.round(d.uv)} · ${UV_TXT(d.uv)}</span>`;
+  const v=WX&&now-WX.at<45*60e3?WX.vis:null;if(v!=null&&v<5000)h+=`<span class="fx"><i>Visibilité</i> ${v<1000?Math.round(v/50)*50+' m':(v/1000).toFixed(1).replace('.',',')+' km'}</span>`;
+  if(YR&&YR.temps&&YR.temps[t.h]!=null){const c=YR.codes[t.h],lbl=c!=null?(WX_LABEL[c]||'').toLowerCase():'';
+    h+=`<p class="fyear">Il y a un an, à cette heure-ci : ${Math.round(YR.temps[t.h])}°${lbl?', '+lbl:''}.</p>`}
+  return h}
 
 /* ---------- Haïkus ---------- */
 const POEMS={
@@ -1168,8 +1271,10 @@ function fillInfo(){const X=TGT,W=X.W,src=S.live?X.src:null,liveOk=!!src&&src.ki
   const lines=[];if(hasT&&W.wind!=null)lines.push(W.wind<2?'Pas de vent':`Vent ${W.wdir!=null?dirName(W.wdir)+', ':''}${Math.round(W.wind)} km/h`);lines.push(moonName(X.mp));$('#iMinor').innerHTML=lines.join('<br>');
   let note='';if(liveOk)note=src.kind==='now'?`Relevé à ${fmtT(new Date(src.at))}, Charleroi`:`D'après les prévisions de ${fmtT(new Date(src.at))}, Charleroi`;
   else if(!S.live)note='Aperçu, pas la météo réelle';
-  else if(wxFailed)note="La météo en direct ne passe pas ici. Le décor suit l'heure, le soleil, la lune et la saison.";
-  $('#iNote').textContent=note}
+  else if(wxFailed)note=(wxMsg||"La météo en direct ne passe pas ici. Le décor suit l'heure, le soleil, la lune et la saison.")+(diagCode()?` (${diagCode()})`:'');
+  const nb=$('#iNote');nb.textContent=note;
+  if(S.live&&!liveOk&&wxFailed&&wxTap){const b=document.createElement('button');b.type='button';b.className='wxok';b.textContent='Autoriser';
+    b.addEventListener('click',e=>{e.stopPropagation();b.disabled=true;b.textContent='…';fetchWeather()});nb.append(' ',b)}}
 
 /* ---------- Prévisions : les heures et les jours à venir ---------- */
 const CLOUD_D='M7 18H17a3.5 3.5 0 0 0 0-7a5 5 0 0 0-9.4.6A3.2 3.2 0 0 0 7 18Z';
@@ -1207,10 +1312,10 @@ function fcSummary(now){const base=Math.floor(now/3600e3)*3600e3,hs=[];for(let k
 let fcFilled=-1;
 function fillForecast(force){const box=$('#fcast'),now=Date.now();
   const ok=!!FC&&now-FC.at<36*3600e3&&FC.hours.some(h=>h.t>now+3600e3);
-  const key=ok?FC.at+'|'+Math.floor(now/3600e3):(wxFailed?'off':'wait');if(!force&&key===fcFilled)return;fcFilled=key;
+  const key=ok?FC.at+'|'+Math.floor(now/3600e3)+'|'+(AQ?AQ.at:0)+'|'+(YR?YR.key:''):(wxFailed?'off':'wait');if(!force&&key===fcFilled)return;fcFilled=key;
   box.classList.toggle('empty',!ok);
-  if(!ok){$('#fSum').textContent=wxFailed?"Pas de prévisions pour l'instant : la page n'arrive pas à joindre le service météo.":'Prévisions en cours de chargement.';
-    $('#fHours').innerHTML='';$('#fDays').innerHTML='';$('#fNote').textContent='';return}
+  if(!ok){$('#fSum').textContent=wxFailed?(wxMsg||"Pas de prévisions pour l'instant : la page n'arrive pas à joindre le service météo."):'Prévisions en cours de chargement.';
+    $('#fHours').innerHTML='';$('#fDays').innerHTML='';$('#fExtra').innerHTML='';$('#fNote').textContent='';return}
   $('#fSum').textContent=fcSummary(now);
   const start=Math.ceil(now/3600e3)*3600e3;let html='';
   for(let k=0;k<14;k++){const t=start+k*3600e3,h=FC.hours.find(x=>x.t===t);if(!h||h.temp==null)continue;
@@ -1224,7 +1329,8 @@ function fillForecast(force){const box=$('#fcast'),now=Date.now();
     dh+=`<div class="fd" style="--k:${dh.split('class="fd"').length-1}"><span class="fdn">${name}</span>${glyph(d.code,false)}<span class="fdt">${Math.round(d.tmax)}° <span>${Math.round(d.tmin)}°</span></span></div>`;
     if(dh.split('class="fd"').length>4)break}
   $('#fDays').innerHTML=dh;
-  $('#fNote').textContent=`Prévisions mises à jour à ${fmtT(new Date(FC.at))}. Touchez une heure pour voir le lac à ce moment-là.`}
+  $('#fExtra').innerHTML=extraHtml(now);
+  $('#fNote').innerHTML=`Prévisions mises à jour à ${fmtT(new Date(FC.at))}. Touchez une heure pour voir le lac à ce moment-là.<br>${WXSRC==='accu'?'Données <a href="https://www.accuweather.com/" target="_blank" rel="noopener">AccuWeather</a>, Marcinelle':'Données <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0)'}`}
 function infoFrom(p){const cs=getComputedStyle(p),[wx,wy]=toScreen(345,560),k=(236*sc)/(p.offsetWidth||300);
   return`translate(calc(-50% + ${wx-parseFloat(cs.left)}px),calc(-50% + ${wy-parseFloat(cs.top)}px)) scale(${k.toFixed(3)})`}
 let infoAt=0;
