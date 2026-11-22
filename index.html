@@ -475,7 +475,7 @@ const WX_URL='https://api.open-meteo.com/v1/forecast?latitude=50.4108&longitude=
   '&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility'+
   '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max'+
   '&past_hours=12&forecast_hours=48&forecast_days=5&timezone=Europe%2FBrussels&timeformat=unixtime&wind_speed_unit=kmh';
-let wxBusy=false,WXSRC=store.get('wxsrc','om'),wxMsg='',wxTap=false,wxRetried=false;
+let wxBusy=false,WXSRC=store.get('wxsrc','om'),wxMsg='',wxTap=false,wxTries=0;
 /* Dans claude.ai, la page ne peut pas appeler un autre site : elle passe alors par le connecteur AccuWeather
    de François (gratuit). Ailleurs (GitHub Pages), elle appelle Open-Meteo directement. */
 const ACCU='AccuWeather',ACCU_KEY='958852';
@@ -504,7 +504,9 @@ function accuMsg(e){const c=e&&e.code;wxTap=false;
   if(c==='approval_required'||c==='not_in_manifest'||c==='consent_required'){wxTap=true;return"La météo en direct attend ton autorisation pour AccuWeather."}
   if(c==='blocked_by_policy')return"AccuWeather est bloqué pour ce compte. Le décor suit l'heure, le soleil, la lune et la saison.";
   if(c==='forme_inattendue')return"AccuWeather a répondu, mais sous une forme que la page ne sait pas encore lire.";
-  return"AccuWeather ne répond pas pour l'instant. Nouvel essai dans quelques minutes."}
+  wxTap=true;
+  if(e&&e.retryable&&/confirm|consent/i.test(String(e.message||'')))return"Accès à AccuWeather pas encore confirmé. Accepte la demande, puis touche Réessayer.";
+  return"AccuWeather ne répond pas pour l'instant.";}
 /* Le connecteur peut renvoyer ses chiffres à plusieurs endroits du résultat : on les cherche partout. */
 function accuData(r,key){if(!r)return null;const cands=[r.payload,r.structuredContent];
   if(Array.isArray(r.content))for(const bl of r.content)if(bl&&typeof bl.text==='string')cands.push(bl.text);
@@ -516,7 +518,8 @@ const dbReady=(typeof window!=='undefined'&&window.claude&&typeof window.claude.
 let DIAG=[],hrRetry=0;
 function diagCode(){const bad=DIAG.find(d=>!d.ok);return bad?bad.code:''}
 async function saveDiag(){try{const db=await dbReady;if(!db)return;
-  await db.doc('diag/last').set({at:new Date().toISOString(),ua:navigator.userAgent.slice(0,160),steps:DIAG})}catch(e){}}
+  const entry={at:new Date().toISOString(),steps:DIAG},hist=store.get('diag',[]);hist.push(entry);while(hist.length>15)hist.shift();store.set('diag',hist);
+  await db.doc('diag/last').set({at:entry.at,ua:navigator.userAgent.slice(0,160),steps:DIAG,history:hist})}catch(e){}}
 async function accuCall(mcp,tool,key,opt){const inp={queryParams:{locationKey:ACCU_KEY,unit:'metric',lang:'fr'}},t0=Date.now();
   try{const r=await mcp.callTool(ACCU,tool,inp,opt);const d=accuData(r,key);
     DIAG.push({tool,ok:!!d,ms:Date.now()-t0,code:d?'':'forme_inattendue',keys:r?Object.keys(r).join(','):'',pkeys:r&&r.payload&&typeof r.payload==='object'?Object.keys(r.payload).slice(0,8).join(','):typeof(r&&r.payload)});
@@ -538,15 +541,15 @@ async function fetchOpenMeteo(){const ctrl=typeof AbortController!=='undefined'?
 async function fetchWeather(){if(wxBusy)return;wxBusy=true;let retry=null;
   try{const mcp=await mcpReady;
     if(mcp){try{await fetchAccu(mcp)}
-      catch(e){wxMsg=accuMsg(e);if(e&&e.retryable&&!wxRetried){wxRetried=true;retry=(e.retryAfterMs||0)+2500+Math.random()*2500}
+      catch(e){wxMsg=accuMsg(e);if(e&&e.retryable&&wxTries<6){wxTries++;retry=Math.max(e.retryAfterMs||0,1500*2**(wxTries-1))+Math.random()*1000}
         try{await fetchOpenMeteo()}catch(e2){throw e}}}
     else await fetchOpenMeteo();
-    wxRetried=false}
+    wxTries=0}
   catch(e){wxFailed=true;if(WX&&Date.now()-WX.at>3*3600e3)WX=null}
   finally{wxBusy=false}
   update();if(infoOpen){fillInfo();fillForecast(true)}
   if(retry)setTimeout(fetchWeather,retry);
-  if(WXSRC!=='accu'){fetchAir();fetchYear()}}
+  if(WXSRC!=='accu')fetchAir()}
 
 /* ---------- Air, pollen et souvenir d'il y a un an (Open-Meteo, gratuit, sans clé) ---------- */
 let AQ=store.get('aq',null);if(AQ&&Date.now()-AQ.at>3*3600e3)AQ=null;
@@ -574,8 +577,6 @@ function extraHtml(now){let h='';
   const t=bxl(new Date(now)),d=FC&&FC.days?FC.days.find(x=>{const b=bxl(new Date(x.t+12*3600e3));return b.d===t.d&&b.m===t.m}):null;
   if(d&&d.uv!=null&&d.uv>=3&&t.hd<17)h+=`<span class="fx"><i>UV</i> ${Math.round(d.uv)} · ${UV_TXT(d.uv)}</span>`;
   const v=WX&&now-WX.at<45*60e3?WX.vis:null;if(v!=null&&v<5000)h+=`<span class="fx"><i>Visibilité</i> ${v<1000?Math.round(v/50)*50+' m':(v/1000).toFixed(1).replace('.',',')+' km'}</span>`;
-  if(YR&&YR.temps&&YR.temps[t.h]!=null){const c=YR.codes[t.h],lbl=c!=null?(WX_LABEL[c]||'').toLowerCase():'';
-    h+=`<p class="fyear">Il y a un an, à cette heure-ci : ${Math.round(YR.temps[t.h])}°${lbl?', '+lbl:''}.</p>`}
   return h}
 
 /* ---------- Haïkus ---------- */
@@ -1273,8 +1274,8 @@ function fillInfo(){const X=TGT,W=X.W,src=S.live?X.src:null,liveOk=!!src&&src.ki
   else if(!S.live)note='Aperçu, pas la météo réelle';
   else if(wxFailed)note=(wxMsg||"La météo en direct ne passe pas ici. Le décor suit l'heure, le soleil, la lune et la saison.")+(diagCode()?` (${diagCode()})`:'');
   const nb=$('#iNote');nb.textContent=note;
-  if(S.live&&!liveOk&&wxFailed&&wxTap){const b=document.createElement('button');b.type='button';b.className='wxok';b.textContent='Autoriser';
-    b.addEventListener('click',e=>{e.stopPropagation();b.disabled=true;b.textContent='…';fetchWeather()});nb.append(' ',b)}}
+  if(S.live&&!liveOk&&wxFailed&&wxTap){const b=document.createElement('button');b.type='button';b.className='wxok';b.textContent=wxMsg.includes('autorisation')?'Autoriser':'Réessayer';
+    b.addEventListener('click',e=>{e.stopPropagation();b.disabled=true;b.textContent='…';wxTries=0;fetchWeather()});nb.append(' ',b)}}
 
 /* ---------- Prévisions : les heures et les jours à venir ---------- */
 const CLOUD_D='M7 18H17a3.5 3.5 0 0 0 0-7a5 5 0 0 0-9.4.6A3.2 3.2 0 0 0 7 18Z';
@@ -1312,7 +1313,7 @@ function fcSummary(now){const base=Math.floor(now/3600e3)*3600e3,hs=[];for(let k
 let fcFilled=-1;
 function fillForecast(force){const box=$('#fcast'),now=Date.now();
   const ok=!!FC&&now-FC.at<36*3600e3&&FC.hours.some(h=>h.t>now+3600e3);
-  const key=ok?FC.at+'|'+Math.floor(now/3600e3)+'|'+(AQ?AQ.at:0)+'|'+(YR?YR.key:''):(wxFailed?'off':'wait');if(!force&&key===fcFilled)return;fcFilled=key;
+  const key=ok?FC.at+'|'+Math.floor(now/3600e3)+'|'+(AQ?AQ.at:0):(wxFailed?'off':'wait');if(!force&&key===fcFilled)return;fcFilled=key;
   box.classList.toggle('empty',!ok);
   if(!ok){$('#fSum').textContent=wxFailed?(wxMsg||"Pas de prévisions pour l'instant : la page n'arrive pas à joindre le service météo."):'Prévisions en cours de chargement.';
     $('#fHours').innerHTML='';$('#fDays').innerHTML='';$('#fExtra').innerHTML='';$('#fNote').textContent='';return}
